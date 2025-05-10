@@ -4,35 +4,38 @@ import argparse
 import os
 from pathlib import Path
 from typing import List
+import time
 
 import torch
+
 from transformers import (
-    AutoModelForSpeechSeq2Seq,
-    AutoProcessor,
-    pipeline,
+    WhisperForConditionalGeneration,
+    WhisperFeatureExtractor,
+    WhisperTokenizer,
+    pipeline
 )
 
 _DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 _DTYPE = torch.float16 if torch.cuda.is_available() else torch.float32
 _MODEL_ID = "openai/whisper-large-v3-turbo"
 
-_processor = AutoProcessor.from_pretrained(_MODEL_ID)
-_model = AutoModelForSpeechSeq2Seq.from_pretrained(
-    _MODEL_ID,
-    torch_dtype=_DTYPE,
-    low_cpu_mem_usage=True,
-    use_safetensors=True,
-)
+_feature_extractor = WhisperFeatureExtractor.from_pretrained(_MODEL_ID)
+_tokenizer = WhisperTokenizer.from_pretrained(_MODEL_ID, language="spanish", task="transcribe")
+_model = WhisperForConditionalGeneration.from_pretrained(_MODEL_ID)
+_forced_decoder_ids = _tokenizer.get_decoder_prompt_ids(language="spanish", task="transcribe")
+
 _model.to(_DEVICE)
 
 _pipe = pipeline(
     "automatic-speech-recognition",
     model=_model,
-    tokenizer=_processor.tokenizer,
-    feature_extractor=_processor.feature_extractor,
+    tokenizer=_tokenizer,
+    feature_extractor=_feature_extractor,
     torch_dtype=_DTYPE,
     device=_DEVICE,
+    chunk_length_s=30,
     return_timestamps=True,
+    #stride_length_s=(4, 2) # No estoy seguro de si este necesito para tener el algoritmo de HF
 )
 
 
@@ -47,12 +50,21 @@ def transcribe(paths: List[str] | str) -> List[str]:
         if not os.path.exists(p):
             raise FileNotFoundError(p)
         abs_paths.append(p)
+    
+    # Start the timer
+    start_time = time.time()
 
-    results = _pipe(abs_paths)
+    results = _pipe(abs_paths, generate_kwargs={"forced_decoder_ids": _forced_decoder_ids})
+
+    # Calculate inference time
+    inference_time = time.time() - start_time
     
     if isinstance(results, dict):
         results = [results]
-    return [r["text"] for r in results]
+
+    transcriptions = [r["text"] for r in results]
+
+    return transcriptions, inference_time
 
 def _main() -> None:
     parser = argparse.ArgumentParser(
