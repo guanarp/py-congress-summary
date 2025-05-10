@@ -7,4 +7,7 @@ if __name__ == "__main__":
     parser.add_argument("audio", help="Audio file path")
     args = parser.parse_args()
 
-    print(transcribe(args.audio)[0])
+    transcription, inference_time =  transcribe(args.audio)
+
+    print(transcription[0])
+    print(f"Inference time: {inference_time:0f} ms")

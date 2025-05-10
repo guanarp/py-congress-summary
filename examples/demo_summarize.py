@@ -3,7 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from src.inference.summarizer import load_model, summarise
+from src.inference.llm_utils import load_model
+from src.inference.summarizer import summarise
 
 
 def _parse_args() -> argparse.Namespace:
@@ -45,9 +46,9 @@ def main() -> None:
             f"Model file not found: {model_path}. Run examples/demo_download.py first."
         )
 
-    llm = load_model(model_path)
+    llm = load_model(model_path, n_gpu_layers=args.gpu_layers)
     print("backend =", llm.metadata.get("backend", "cpu"))
-    summary, ms = summarise(llm, args.text)
+    summary, ms = summarise(llm, args.text, max_tokens=48)
     print(summary)
     print(f"Inference time: {ms:.0f} ms")
 
